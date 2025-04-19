@@ -52,6 +52,9 @@ lib.define(
 lib.define(
     "scaled_dot_product_int8(Tensor query, Tensor key, Tensor value, Tensor? attn_mask=None, float dropout_p=0.0, bool is_causal=False, float scale=0.0, float q_scale=1.0, int q_zp=0, float k_scale=1.0, int k_zp=0, float v_scale=1.0, int v_zp=0, float a_scale=1.0, int a_zp=0, float o_scale=1.0, int o_zp=0) -> Tensor"
 )
+lib.define(
+    "dequantize_nf4(Tensor qweight, str weight_type, int[] weight_shape, Tensor weight_scales, Tensor? weight_zeros, int group_size) -> Tensor"
+)
 
 
 def register_custom_op(name):
@@ -900,3 +903,16 @@ def meta_mx_fp4_bf16(A: Tensor, B: Tensor, A_scale: Tensor, B_scale: Tensor):
     """Meta impl for mx_fp4_bf16"""
     # Assume that the contraction happens in the K dim thus M,N are perserved post bit pack
     return torch.empty((A.size(0), B.size(1)), dtype=torch.bfloat16, device=A.device)
+
+
+def dequantize_nf4(
+    qweight: Tensor,
+    weight_dtype: str,
+    weight_shape: list,
+    weight_scales: Tensor,
+    weight_zeros: Tensor,
+    group_size: int
+) -> Tensor:
+    return torch.ops.torchao.dequantize_nf4.default(
+        qweight, weight_dtype, weight_shape, weight_scales, weight_zeros, group_size
+    )
