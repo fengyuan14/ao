@@ -77,9 +77,11 @@ from torch.utils.cpp_extension import (
     CUDA_HOME,
     IS_WINDOWS,
     ROCM_HOME,
+    SYCL_HOME,
     BuildExtension,
     CppExtension,
     CUDAExtension,
+    SyclExtension,
     _get_cuda_arch_flags,
 )
 
@@ -270,7 +272,10 @@ def get_extensions():
     use_cuda = torch.cuda.is_available() and (
         CUDA_HOME is not None or ROCM_HOME is not None
     )
-    extension = CUDAExtension if use_cuda else CppExtension
+
+    use_xpu = torch.xpu.is_available() and SYCL_HOME is not None
+
+    extension = CUDAExtension if use_cuda else (SyclExtension if use_xpu else CppExtension)
 
     extra_link_args = []
     extra_compile_args = {
@@ -279,6 +284,11 @@ def get_extensions():
             "-DNDEBUG" if not debug_mode else "-DDEBUG",
             "-O3" if not debug_mode else "-O0",
             "-t=0",
+            "-std=c++17",
+        ],
+        "sycl": [
+            "-DNDEBUG" if not debug_mode else "-DDEBUG",
+            "-O3" if not debug_mode else "-O0",
             "-std=c++17",
         ],
     }
@@ -303,6 +313,8 @@ def get_extensions():
             extra_compile_args["cxx"].append("-g")
             if "nvcc" in extra_compile_args:
                 extra_compile_args["nvcc"].append("-g")
+            if "sycl" in extra_compile_args:
+                extra_compile_args["sycl"].append("-g")
             extra_link_args.extend(["-O0", "-g"])
     else:
         extra_compile_args["cxx"].extend(
@@ -312,6 +324,7 @@ def get_extensions():
         if debug_mode:
             extra_compile_args["cxx"].append("/ZI")
             extra_compile_args["nvcc"].append("-g")
+            extra_compile_args["sycl"].append("-g")
             extra_link_args.append("/DEBUG")
 
     # Get base directory and source paths
@@ -343,6 +356,11 @@ def get_extensions():
         glob.glob(os.path.join(extensions_hip_dir, "*.cu"), recursive=True)
     )
 
+    extensions_sycl_dir = os.path.join(extensions_dir, "sycl")
+    sycl_sources = list(
+        glob.glob(os.path.join(extensions_sycl_dir, "**/*.sycl"), recursive=True)
+    )
+
     # Collect CUDA source files if needed
     if not IS_ROCM and use_cuda:
         sources += cuda_sources
@@ -358,6 +376,9 @@ def get_extensions():
             )
         else:
             sources += hip_sources
+
+    if use_xpu:
+        sources += sycl_sources
 
     use_cutlass = False
     cutlass_90a_sources = None
